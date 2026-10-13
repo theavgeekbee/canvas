@@ -25,14 +25,14 @@ function handleMove(evt) {
         const color = document.getElementById('selColor').value;
         const idx = ongoingTouchIndexById(touches[i].identifier);
         if (idx >= 0) {
-            context.beginPath();
-            context.moveTo(ongoingTouches[idx].clientX - offsetX, ongoingTouches[idx].clientY - offsetY);
-            context.lineTo(touches[i].clientX - offsetX, touches[i].clientY - offsetY);
-            context.lineWidth = document.getElementById('lineSize').valueAsNumber;
-            context.strokeStyle = color;
-            context.lineJoin = "round";
-            context.closePath();
-            context.stroke();
+            drawLine(
+                context,
+                ongoingTouches[idx].clientX - offsetX,
+                ongoingTouches[idx].clientY - offsetY,
+                touches[i].clientX - offsetX,
+                touches[i].clientY - offsetY
+            );
+
             ongoingTouches.splice(idx, 1, copyTouch(touches[i]));
         }
     }
@@ -78,12 +78,24 @@ function ongoingTouchIndexById(idToFind) {
 }
 
 function drawLine(context, x1, y1, x2, y2) {
+    const event = {
+        "originX": x1,
+        "originY": y1,
+        "destX": x2,
+        "destY": y2,
+        "lineColor": document.getElementById('lineColor').value,
+        "lineSize": document.getElementById('lineSize').value
+    };
+    ws.send(JSON.stringify(event));
+}
+
+function renderLine(event) {
     context.beginPath();
-    context.strokeStyle = document.getElementById('lineColor').value;
-    context.lineWidth = document.getElementById('lineSize').value;
+    context.strokeStyle = event.lineColor;
+    context.lineWidth = event.lineSize;
     context.lineJoin = "round";
-    context.moveTo(x1, y1);
-    context.lineTo(x2, y2);
+    context.moveTo(event.originX, event.originY);
+    context.lineTo(event.destX, event.destY);
     context.closePath();
     context.stroke();
 }
@@ -92,6 +104,25 @@ function clearArea() {
     context.setTransform(1, 0, 0, 1, 0, 0);
     context.clearRect(0, 0, context.canvas.width, context.canvas.height);
 }
+
+const wsProto = location.protocol === "https:" ? "wss:" : "ws:";
+const ws = new WebSocket(`${wsProto}//${location.host}/global`);
+
+ws.onmessage = (event) => {
+    const evtData = JSON.parse(event.data);
+    console.log("Received:", evtData);
+
+    if (evtData.type === "initial") {
+        for (const elem of evtData.contents) {
+            renderLine(elem);
+        }
+    } else if (evtData.type === "message") {
+        renderLine(evtData.contents);
+    }
+}
+ws.onopen = () => console.log("Connected");
+ws.onerror = (event) => console.error("WebSocket error:", event);
+ws.onclose = () => console.log("Disconnected");
 
 canvas.addEventListener('touchstart', handleStart);
 canvas.addEventListener('touchend', handleEnd);
@@ -119,3 +150,4 @@ canvas.addEventListener('mouseup', (e) => {
         isDrawing = false;
     }
 });
+
